@@ -7,6 +7,8 @@ import {
   DndContext,
   closestCenter,
   PointerSensor,
+  TouchSensor,
+  KeyboardSensor,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
@@ -14,7 +16,8 @@ import {
   SortableContext,
   arrayMove,
   verticalListSortingStrategy,
-  useSortable,
+  useSortable, 
+  sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
@@ -53,7 +56,9 @@ function ListContainer({
   const [editedName, setEditedName] = useState(list.name); // 👈 FIX
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
   const handleSubmit = async (e) => {
@@ -190,7 +195,9 @@ export default function App() {
   const [newList, setNewList] = useState("");
 
   const listSensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
   useEffect(() => {
