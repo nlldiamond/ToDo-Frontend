@@ -8,7 +8,6 @@ import {
   closestCenter,
   PointerSensor,
   TouchSensor,
-  KeyboardSensor,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
@@ -16,8 +15,7 @@ import {
   SortableContext,
   arrayMove,
   verticalListSortingStrategy,
-  useSortable, 
-  sortableKeyboardCoordinates,
+  useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
@@ -49,16 +47,18 @@ function ListContainer({
   deleteTask,
   deleteList,
   onTasksReordered,
-  renameList, // 👈 NEW PROP
+  renameList,
+  renameTask,
 }) {
   const [newTask, setNewTask] = useState("");
-  const [isEditing, setIsEditing] = useState(false); // 👈 FIX
-  const [editedName, setEditedName] = useState(list.name); // 👈 FIX
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedName, setEditedName] = useState(list.name);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 150, tolerance: 5 },
+    })
   );
 
   const handleSubmit = async (e) => {
@@ -97,6 +97,7 @@ function ListContainer({
     await renameList(list._id, editedName);
     setIsEditing(false);
   };
+
 
   return (
     <motion.div
@@ -172,6 +173,8 @@ function ListContainer({
                   task={task}
                   onToggle={() => toggleTask(list._id, task._id)}
                   onDelete={() => deleteTask(list._id, task._id)}
+                  onRename={(newText) => renameTask(list._id, task._id, newText)}
+
                 />
               ))
             ) : (
@@ -196,14 +199,42 @@ export default function App() {
 
   const listSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 150, tolerance: 5 },
+    })
   );
+
+// ✅ Rename a task
+const renameTask = async (listId, taskId, newText) => {
+  try {
+    const res = await fetch(`/api/todos/${listId}/tasks/${taskId}/rename`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: newText }),
+    });
+    const updatedTask = await res.json();
+
+    setLists((prev) =>
+      prev.map((list) =>
+        list._id === listId
+          ? {
+              ...list,
+              tasks: list.tasks.map((task) =>
+                task._id === taskId ? updatedTask : task
+              ),
+            }
+          : list
+      )
+    );
+  } catch (err) {
+    console.error("❌ Rename task error:", err);
+  }
+};
 
   useEffect(() => {
     (async () => {
       try {
-        const res = await axios.get(`${import.meta.env.VITE_API_BASE_URL}/api/todos`);
+        const res = await axios.get(`${API}/api/todos`);
         const normalized = res.data.map((list) => ({
           ...list,
           tasks: [...(list.tasks || [])].sort(
@@ -243,10 +274,9 @@ export default function App() {
 
   const addTask = async (listId, text) => {
     try {
-      const res = await axios.post(
-        `${API}/api/todos/${listId}/tasks`,
-        { text }
-      );
+      const res = await axios.post(`${API}/api/todos/${listId}/tasks`, {
+        text,
+      });
       setLists((prev) =>
         prev.map((l) =>
           l._id === listId ? { ...l, tasks: [...l.tasks, res.data] } : l
@@ -259,9 +289,7 @@ export default function App() {
 
   const toggleTask = async (listId, taskId) => {
     try {
-      const res = await axios.put(
-        `${API}/api/todos/${listId}/tasks/${taskId}`
-      );
+      const res = await axios.put(`${API}/api/todos/${listId}/tasks/${taskId}`);
       setLists((prev) =>
         prev.map((l) =>
           l._id === listId
@@ -279,9 +307,7 @@ export default function App() {
 
   const deleteTask = async (listId, taskId) => {
     try {
-      await axios.delete(
-        `${API}/api/todos/${listId}/tasks/${taskId}`
-      );
+      await axios.delete(`${API}/api/todos/${listId}/tasks/${taskId}`);
       setLists((prev) =>
         prev.map((l) =>
           l._id === listId
@@ -328,9 +354,9 @@ export default function App() {
       }`}
     >
       {/* Header */}
-      <div className="max-w-5xl mx-auto mb-6 flex items-center relative">
+      <div className="max-w-5xl mx-auto mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <h1
-          className={`text-3xl font-bold mx-auto ${
+          className={`text-3xl font-bold text-center sm:text-left mb-4 sm:mb-0 ${
             darkMode ? "text-white" : "text-black"
           }`}
         >
@@ -340,7 +366,7 @@ export default function App() {
         {/* Dark mode toggle */}
         <div
           onClick={() => setDarkMode(!darkMode)}
-          className="w-14 h-7 bg-gray-700 rounded-full p-1 cursor-pointer flex items-center absolute right-0"
+          className="w-14 h-7 bg-gray-700 rounded-full p-1 cursor-pointer flex items-center mx-auto sm:mx-0"
         >
           <motion.div
             layout
@@ -395,7 +421,8 @@ export default function App() {
                     deleteTask={deleteTask}
                     deleteList={deleteList}
                     onTasksReordered={onTasksReordered}
-                    renameList={renameList} // 👈 pass down
+                    renameList={renameList}
+                    renameTask={renameTask} 
                   />
                 </SortableListWrapper>
               ))
