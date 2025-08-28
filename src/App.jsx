@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import axios from "axios";
-import { Pencil } from "lucide-react";
+import { Pencil, Sun, Moon } from "lucide-react";
 
 import {
   DndContext,
@@ -50,6 +50,7 @@ function ListContainer({
   renameList,
   renameTask,
   backendOnline,
+  darkMode,
 }) {
   const [newTask, setNewTask] = useState("");
   const [isEditing, setIsEditing] = useState(false);
@@ -105,9 +106,11 @@ function ListContainer({
       animate={{ opacity: 1, scale: 1 }}
       whileHover={{ scale: 1.01 }}
       transition={{ duration: 0.18 }}
-      className="bg-gradient-to-br from-[#1f2937] to-[#111827]
-                 p-6 rounded-2xl shadow-2xl border border-gray-700
-                 w-full max-w-sm hover:border-indigo-500"
+      className={`p-6 rounded-2xl shadow-2xl border w-[23rem] 
+        ${darkMode
+          ? "bg-gradient-to-br from-[#1f2937] to-[#111827] border-gray-700 hover:border-indigo-500"
+          : "bg-white border-gray-300 hover:border-indigo-500"
+        }`}
     >
       {/* List Header */}
       <div className="flex justify-between items-center mb-4">
@@ -119,14 +122,20 @@ function ListContainer({
             onBlur={handleRename}
             onKeyDown={(e) => e.key === "Enter" && handleRename()}
             autoFocus
-            className="text-2xl font-bold text-white bg-transparent border-b border-indigo-400 focus:outline-none"
+            className={`text-2xl font-bold border-b focus:outline-none ${
+              darkMode
+                ? "text-white bg-transparent border-indigo-400"
+                : "text-black bg-transparent border-gray-500"
+            }`}
           />
         ) : (
           <div className="flex items-center gap-2">
-            <h2 className="text-2xl font-bold text-white">{list.name}</h2>
+            <h2 className={`${darkMode ? "text-white" : "text-black"} text-2xl font-bold`}>
+              {list.name}
+            </h2>
             <button
               onClick={() => setIsEditing(true)}
-              className="text-gray-400 hover:text-indigo-400"
+              className={`${darkMode ? "text-gray-400 hover:text-indigo-400" : "text-gray-600 hover:text-indigo-500"}`}
             >
               <Pencil size={18} />
             </button>
@@ -134,7 +143,7 @@ function ListContainer({
         )}
         <button
           onClick={() => deleteList(list._id)}
-          className="text-red-400 hover:text-red-600 text-sm font-medium"
+          className={`${darkMode ? "text-red-400 hover:text-red-600" : "text-red-600 hover:text-red-800"} text-sm font-medium`}
         >
           Delete List
         </button>
@@ -147,12 +156,16 @@ function ListContainer({
           value={newTask}
           placeholder="Add a task..."
           onChange={(e) => setNewTask(e.target.value)}
-          className="flex-1 px-3 py-2 rounded-md bg-[#0e141b] border border-gray-600 text-white placeholder-gray-400
-                     focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className={`flex-1 px-3 py-2 rounded-md 
+                      ${darkMode ? "bg-[#0e141b] border border-gray-600 text-white placeholder-gray-400" 
+                                : "bg-white border border-gray-300 text-black placeholder-gray-500"} 
+                      focus:outline-none focus:ring-2 ${darkMode ? "focus:ring-indigo-500" : "focus:ring-indigo-400"}`}
           disabled={!backendOnline}
         />
         <button
-          className="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-md font-semibold"
+          className={`px-4 py-2 rounded-md font-semibold 
+                      ${darkMode ? "bg-indigo-500 hover:bg-indigo-600 text-white" 
+                                : "bg-indigo-400 hover:bg-indigo-500 text-white"}`}
           disabled={!backendOnline}
         >
           Add
@@ -175,6 +188,7 @@ function ListContainer({
                 <SortableTask
                   key={task._id}
                   task={task}
+                  darkMode={darkMode}
                   onToggle={() =>
                     backendOnline && toggleTask(list._id, task._id)
                   }
@@ -418,13 +432,18 @@ useEffect(() => {
         {/* Dark mode toggle */}
         <div
           onClick={() => setDarkMode(!darkMode)}
-          className="w-14 h-7 bg-gray-700 rounded-full p-1 cursor-pointer flex items-center mx-auto sm:mx-0"
+          className={`w-14 h-7 rounded-full p-1 cursor-pointer flex items-center transition-colors duration-300
+                      ${darkMode ? "bg-gray-700" : "bg-yellow-300"} mx-auto sm:mx-0`}
         >
           <motion.div
             layout
-            className="w-5 h-5 bg-indigo-500 rounded-full shadow"
-            style={{ x: darkMode ? 28 : 0 }}
-          />
+            initial={false}
+            animate={{ x: darkMode ? 28 : 0 }}
+            transition={{ type: "spring", stiffness: 500, damping: 30 }}
+            className="w-5 h-5 bg-indigo-500 rounded-full shadow flex items-center justify-center text-white"
+          >
+            {darkMode ? <Moon size={12} /> : <Sun size={12} />}
+          </motion.div>
         </div>
       </div>
 
@@ -441,14 +460,23 @@ useEffect(() => {
           placeholder="New list name..."
           value={newList}
           onChange={(e) => setNewList(e.target.value)}
-          className="flex-1 px-3 py-2 rounded-md bg-[#0e141b] border border-gray-600 text-white placeholder-gray-400
-                    focus:outline-none focus:ring-2 focus:ring-green-500"
           disabled={!backendOnline}
+          className={`flex-1 px-3 py-2 rounded-md border focus:outline-none focus:ring-2
+            ${
+              darkMode
+                ? "bg-[#0e141b] border-gray-600 text-white placeholder-gray-400 focus:ring-green-500"
+                : "bg-white border-gray-300 text-black placeholder-gray-500 focus:ring-green-500"
+            }`}
         />
         <button
           type="submit"
-          className="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 font-semibold"
           disabled={!backendOnline}
+          className={`px-4 py-2 rounded-md font-semibold
+            ${
+              darkMode
+                ? "bg-green-500 text-white hover:bg-green-600"
+                : "bg-green-400 text-black hover:bg-green-500"
+            }`}
         >
           Create List
         </button>
@@ -478,6 +506,7 @@ useEffect(() => {
                     renameList={renameList}
                     renameTask={renameTask}
                     backendOnline={backendOnline}
+                    darkMode={darkMode}
                   />
                 </SortableListWrapper>
               ))
