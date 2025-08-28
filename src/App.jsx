@@ -49,6 +49,7 @@ function ListContainer({
   onTasksReordered,
   renameList,
   renameTask,
+  backendOnline,
 }) {
   const [newTask, setNewTask] = useState("");
   const [isEditing, setIsEditing] = useState(false);
@@ -97,7 +98,6 @@ function ListContainer({
     await renameList(list._id, editedName);
     setIsEditing(false);
   };
-
 
   return (
     <motion.div
@@ -149,8 +149,12 @@ function ListContainer({
           onChange={(e) => setNewTask(e.target.value)}
           className="flex-1 px-3 py-2 rounded-md bg-[#0e141b] border border-gray-600 text-white placeholder-gray-400
                      focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          disabled={!backendOnline}
         />
-        <button className="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-md font-semibold">
+        <button
+          className="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-md font-semibold"
+          disabled={!backendOnline}
+        >
           Add
         </button>
       </form>
@@ -171,10 +175,14 @@ function ListContainer({
                 <SortableTask
                   key={task._id}
                   task={task}
-                  onToggle={() => toggleTask(list._id, task._id)}
+                  onToggle={() =>
+                    backendOnline && toggleTask(list._id, task._id)
+                  }
                   onDelete={() => deleteTask(list._id, task._id)}
-                  onRename={(newText) => renameTask(list._id, task._id, newText)}
-
+                  onRename={(newText) =>
+                    backendOnline && renameTask(list._id, task._id, newText)
+                  }
+                  disabled={!backendOnline}
                 />
               ))
             ) : (
@@ -196,6 +204,7 @@ export default function App() {
   const [lists, setLists] = useState([]);
   const [darkMode, setDarkMode] = useState(true);
   const [newList, setNewList] = useState("");
+  const [backendOnline, setBackendOnline] = useState(true);
 
   const listSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -204,52 +213,67 @@ export default function App() {
     })
   );
 
-// ✅ Rename a task
-const renameTask = async (listId, taskId, newText) => {
-  try {
-    const res = await fetch(`/api/todos/${listId}/tasks/${taskId}/rename`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: newText }),
-    });
-    const updatedTask = await res.json();
+  // Check backend status
+useEffect(() => {
+  let isMounted = true;
 
-    setLists((prev) =>
-      prev.map((list) =>
-        list._id === listId
-          ? {
-              ...list,
-              tasks: list.tasks.map((task) =>
-                task._id === taskId ? updatedTask : task
-              ),
-            }
-          : list
-      )
-    );
-  } catch (err) {
-    console.error("❌ Rename task error:", err);
-  }
-};
+  const fetchData = async () => {
+    try {
+      // Check backend
+      await axios.get(`${API}/api/todos`);
+      if (isMounted) setBackendOnline(true);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await axios.get(`${API}/api/todos`);
-        const normalized = res.data.map((list) => ({
-          ...list,
-          tasks: [...(list.tasks || [])].sort(
-            (a, b) => (a.order ?? 0) - (b.order ?? 0)
-          ),
-        }));
-        setLists(normalized);
-      } catch (err) {
-        console.error("❌ Error fetching lists:", err.message);
-      }
-    })();
-  }, []);
+      // Fetch lists
+      const res = await axios.get(`${API}/api/todos`);
+      const normalized = res.data.map((list) => ({
+        ...list,
+        tasks: [...(list.tasks || [])].sort(
+          (a, b) => (a.order ?? 0) - (b.order ?? 0)
+        ),
+      }));
+      if (isMounted) setLists(normalized);
+    } catch (err) {
+      if (isMounted) setBackendOnline(false);
+      console.error("❌ Error fetching data:", err.message);
+    }
+  };
+
+  fetchData();
+
+  const interval = setInterval(fetchData, 5000); // poll every 5 seconds
+
+  return () => {
+    isMounted = false;
+    clearInterval(interval);
+  };
+}, []);
+
+  const renameTask = async (listId, taskId, newText) => {
+    try {
+      const res = await axios.put(
+        `${API}/api/todos/${listId}/tasks/${taskId}/rename`,
+        { text: newText }
+      );
+
+      setLists((prev) =>
+        prev.map((list) =>
+          list._id === listId
+            ? {
+                ...list,
+                tasks: list.tasks.map((task) =>
+                  task._id === taskId ? res.data : task
+                ),
+              }
+            : list
+        )
+      );
+    } catch (err) {
+      console.error("❌ Rename task error:", err?.message);
+    }
+  };
 
   const createList = async (name) => {
-    if (!name.trim()) return;
+    if (!name.trim() || !backendOnline) return;
     try {
       const res = await axios.post(`${API}/api/todos`, { name });
       setLists((prev) => [...prev, res.data]);
@@ -260,6 +284,7 @@ const renameTask = async (listId, taskId, newText) => {
   };
 
   const renameList = async (listId, newName) => {
+    if (!backendOnline) return;
     try {
       const res = await axios.put(`${API}/api/todos/${listId}`, {
         name: newName,
@@ -268,11 +293,12 @@ const renameTask = async (listId, taskId, newText) => {
         prev.map((l) => (l._id === listId ? { ...l, name: res.data.name } : l))
       );
     } catch (err) {
-      console.error("❌ Error renaming list:", err.message);
+      console.error("❌ Error renaming list:", err?.message);
     }
   };
 
   const addTask = async (listId, text) => {
+    if (!backendOnline) return;
     try {
       const res = await axios.post(`${API}/api/todos/${listId}/tasks`, {
         text,
@@ -288,8 +314,16 @@ const renameTask = async (listId, taskId, newText) => {
   };
 
   const toggleTask = async (listId, taskId) => {
+    if (!backendOnline) return;
     try {
-      const res = await axios.put(`${API}/api/todos/${listId}/tasks/${taskId}`);
+      const res = await axios.put(
+        `${API}/api/todos/${listId}/tasks/${taskId}/toggle`,
+        {},
+        {
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+
       setLists((prev) =>
         prev.map((l) =>
           l._id === listId
@@ -306,6 +340,7 @@ const renameTask = async (listId, taskId, newText) => {
   };
 
   const deleteTask = async (listId, taskId) => {
+    if (!backendOnline) return;
     try {
       await axios.delete(`${API}/api/todos/${listId}/tasks/${taskId}`);
       setLists((prev) =>
@@ -321,6 +356,7 @@ const renameTask = async (listId, taskId, newText) => {
   };
 
   const deleteList = async (listId) => {
+    if (!backendOnline) return;
     try {
       await axios.delete(`${API}/api/todos/${listId}`);
       setLists((prev) => prev.filter((l) => l._id !== listId));
@@ -329,10 +365,19 @@ const renameTask = async (listId, taskId, newText) => {
     }
   };
 
-  const onTasksReordered = (listId, newTasks) => {
+  const onTasksReordered = async (listId, newTasks) => {
     setLists((prev) =>
       prev.map((l) => (l._id === listId ? { ...l, tasks: newTasks } : l))
     );
+
+    if (!backendOnline) return;
+    try {
+      await axios.put(`${API}/api/todos/${listId}/reorder`, {
+        taskIds: newTasks.map((t) => t._id),
+      });
+    } catch (e) {
+      console.error("❌ Error persisting task order:", e?.message);
+    }
   };
 
   const handleListDragEnd = (event) => {
@@ -353,6 +398,13 @@ const renameTask = async (listId, taskId, newText) => {
         darkMode ? "bg-[#161f2b]" : "bg-gray-100"
       }`}
     >
+      {/* Backend status banner */}
+      {!backendOnline && (
+        <div className="bg-red-600 text-white text-center py-2 rounded mb-4">
+          ⚠️ Backend is not running!
+        </div>
+      )}
+
       {/* Header */}
       <div className="max-w-5xl mx-auto mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <h1
@@ -391,10 +443,12 @@ const renameTask = async (listId, taskId, newText) => {
           onChange={(e) => setNewList(e.target.value)}
           className="flex-1 px-3 py-2 rounded-md bg-[#0e141b] border border-gray-600 text-white placeholder-gray-400
                     focus:outline-none focus:ring-2 focus:ring-green-500"
+          disabled={!backendOnline}
         />
         <button
           type="submit"
           className="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 font-semibold"
+          disabled={!backendOnline}
         >
           Create List
         </button>
@@ -422,7 +476,8 @@ const renameTask = async (listId, taskId, newText) => {
                     deleteList={deleteList}
                     onTasksReordered={onTasksReordered}
                     renameList={renameList}
-                    renameTask={renameTask} 
+                    renameTask={renameTask}
+                    backendOnline={backendOnline}
                   />
                 </SortableListWrapper>
               ))
