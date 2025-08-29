@@ -49,7 +49,7 @@ function ListContainer({
   onTasksReordered,
   renameList,
   renameTask,
-  backendOnline,
+  backendStatus,
   darkMode,
 }) {
   const [newTask, setNewTask] = useState("");
@@ -160,14 +160,12 @@ function ListContainer({
                       ${darkMode ? "bg-[#0e141b] border border-gray-600 text-white placeholder-gray-400" 
                                 : "bg-white border border-gray-300 text-black placeholder-gray-500"} 
                       focus:outline-none focus:ring-2 ${darkMode ? "focus:ring-indigo-500" : "focus:ring-indigo-400"}`}
-          disabled={!backendOnline}
-        />
+          disabled={backendStatus !== "online"}        />
         <button
           className={`px-4 py-2 rounded-md font-semibold 
                       ${darkMode ? "bg-indigo-500 hover:bg-indigo-600 text-white" 
                                 : "bg-indigo-400 hover:bg-indigo-500 text-white"}`}
-          disabled={!backendOnline}
-        >
+          disabled={backendStatus !== "online"}        >
           Add
         </button>
       </form>
@@ -190,14 +188,13 @@ function ListContainer({
                   task={task}
                   darkMode={darkMode}
                   onToggle={() =>
-                    backendOnline && toggleTask(list._id, task._id)
+                    backendStatus === "online" && toggleTask(list._id, task._id)
                   }
                   onDelete={() => deleteTask(list._id, task._id)}
                   onRename={(newText) =>
-                    backendOnline && renameTask(list._id, task._id, newText)
+                    backendStatus === "online" && renameTask(list._id, task._id, newText)
                   }
-                  disabled={!backendOnline}
-                />
+                  disabled={backendStatus !== "online"}                />
               ))
             ) : (
               <p className="text-gray-400 text-sm italic">
@@ -218,7 +215,7 @@ export default function App() {
   const [lists, setLists] = useState([]);
   const [darkMode, setDarkMode] = useState(true);
   const [newList, setNewList] = useState("");
-  const [backendOnline, setBackendOnline] = useState(true);
+  const [backendStatus, setBackendStatus] = useState("starting"); 
 
   const listSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -228,39 +225,49 @@ export default function App() {
   );
 
   // Check backend status
-useEffect(() => {
-  let isMounted = true;
+  useEffect(() => {
+    let isMounted = true;
+    let triedOnce = false;
 
-  const fetchData = async () => {
-    try {
-      // Check backend
-      await axios.get(`${API}/api/todos`);
-      if (isMounted) setBackendOnline(true);
+    const fetchData = async () => {
+      try {
+        await axios.get(`${API}/api/todos`);
+        if (isMounted) {
+          setBackendStatus("online");
+        }
 
-      // Fetch lists
-      const res = await axios.get(`${API}/api/todos`);
-      const normalized = res.data.map((list) => ({
-        ...list,
-        tasks: [...(list.tasks || [])].sort(
-          (a, b) => (a.order ?? 0) - (b.order ?? 0)
-        ),
-      }));
-      if (isMounted) setLists(normalized);
-    } catch (err) {
-      if (isMounted) setBackendOnline(false);
-      console.error("❌ Error fetching data:", err.message);
-    }
-  };
+        const res = await axios.get(`${API}/api/todos`);
+        const normalized = res.data.map((list) => ({
+          ...list,
+          tasks: [...(list.tasks || [])].sort(
+            (a, b) => (a.order ?? 0) - (b.order ?? 0)
+          ),
+        }));
+        if (isMounted) setLists(normalized);
+      } catch (err) {
+        if (!triedOnce) {
 
-  fetchData();
+          if (isMounted) setBackendStatus("starting");
+        } else {
 
-  const interval = setInterval(fetchData, 5000); // poll every 5 seconds
+          if (isMounted) setBackendStatus("offline");
+        }
+        console.error("❌ Error fetching data:", err.message);
+      } finally {
+        triedOnce = true;
+      }
+    };
 
-  return () => {
-    isMounted = false;
-    clearInterval(interval);
-  };
-}, []);
+    setBackendStatus("starting");
+    fetchData();
+
+    const interval = setInterval(fetchData, 5000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [API]);
 
   const renameTask = async (listId, taskId, newText) => {
     try {
@@ -287,7 +294,7 @@ useEffect(() => {
   };
 
   const createList = async (name) => {
-    if (!name.trim() || !backendOnline) return;
+    if (!name.trim() || backendStatus !== "online") return;
     try {
       const res = await axios.post(`${API}/api/todos`, { name });
       setLists((prev) => [...prev, res.data]);
@@ -312,7 +319,7 @@ useEffect(() => {
   };
 
   const addTask = async (listId, text) => {
-    if (!backendOnline) return;
+    if (backendStatus !== "online") return;
     try {
       const res = await axios.post(`${API}/api/todos/${listId}/tasks`, {
         text,
@@ -412,10 +419,19 @@ useEffect(() => {
         darkMode ? "bg-[#161f2b]" : "bg-gray-100"
       }`}
     >
+
       {/* Backend status banner */}
-      {!backendOnline && (
-        <div className="bg-red-600 text-white text-center py-2 rounded mb-4">
-          ⚠️ Backend is not running!
+      {backendStatus !== "online" && (
+        <div
+          className={`text-white text-center py-2 rounded mb-4 ${
+            backendStatus === "starting"
+              ? "bg-yellow-600 animate-pulse"
+              : "bg-red-600"
+          }`}
+        >
+          {backendStatus === "starting"
+            ? "⏳ Backend is starting..."
+            : "⚠️ Backend is not running!"}
         </div>
       )}
 
@@ -460,8 +476,7 @@ useEffect(() => {
           placeholder="New list name..."
           value={newList}
           onChange={(e) => setNewList(e.target.value)}
-          disabled={!backendOnline}
-          className={`flex-1 px-3 py-2 rounded-md border focus:outline-none focus:ring-2
+          disabled={backendStatus !== "online"}          className={`flex-1 px-3 py-2 rounded-md border focus:outline-none focus:ring-2
             ${
               darkMode
                 ? "bg-[#0e141b] border-gray-600 text-white placeholder-gray-400 focus:ring-green-500"
@@ -470,8 +485,7 @@ useEffect(() => {
         />
         <button
           type="submit"
-          disabled={!backendOnline}
-          className={`px-4 py-2 rounded-md font-semibold
+          disabled={backendStatus !== "online"}          className={`px-4 py-2 rounded-md font-semibold
             ${
               darkMode
                 ? "bg-green-500 text-white hover:bg-green-600"
@@ -505,7 +519,7 @@ useEffect(() => {
                     onTasksReordered={onTasksReordered}
                     renameList={renameList}
                     renameTask={renameTask}
-                    backendOnline={backendOnline}
+                    backendStatus={backendStatus}
                     darkMode={darkMode}
                   />
                 </SortableListWrapper>
